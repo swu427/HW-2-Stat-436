@@ -1,0 +1,334 @@
+---
+title: "HW 2 Stat 436"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(shiny)
+library(bslib)
+nba_stats = read.csv("NBA_stats_2023.csv")
+```
+
+
+```{r}
+ggplot(nba_stats, aes(MPG, PPG))+
+  geom_point()+
+  xlab("Minutes Per Game")+
+  ylab("Points Per Game")+
+  ggtitle("Most Efficient Players")
+```
+
+```{r}
+ggplot(nba_stats, aes(X3P., X3PA))+
+  geom_point(aes(alpha = 0.1))+
+  xlab("3 Point Percentage")+
+  ylab("3 Point Attempts")+
+  ggtitle("Best Shooters")
+```
+
+
+
+
+
+```{r}
+
+ggplot(nba_stats) +
+  geom_histogram(aes(x = FT.))
+ 
+  
+```
+
+```{r}
+nba_stats %>% 
+ggplot() +
+     geom_histogram(aes(FT.))
+```
+
+
+```{r}
+reset_dist <- function(x, click) {
+   nearPoints(x, click, allRows = TRUE, threshold = 0.1, addDist = TRUE)$dist_
+ }
+ 
+scatter <- function(x, dists) {
+   x %>%
+     mutate(dist = dists) %>%
+     ggplot() +
+     geom_point(aes(MPG, PPG, col = dist), inherit.aes = F, size = 5)
+}
+
+#threshold minimum dist to change color 
+
+ui <- fluidPage(
+  titlePanel("NBA 2022-2023 Statistics"),
+      plotOutput("plot", click = "plot_click"),
+      dataTableOutput("table")
+)
+ 
+
+server <- function(input, output) {
+  
+  dist <- reactiveVal(rep(1, nrow(nba_stats)))
+   observeEvent(
+     input$plot_click,
+     dist(reset_dist(nba_stats, input$plot_click))
+   )
+   
+    output$plot <- renderPlot(scatter(nba_stats, dist())) 
+      #geom_sf(inherit.aes = F, size = 1, color ='red')
+    output$table <- renderDataTable({
+     nba_stats %>%
+       mutate(dist = dist()) %>%
+       arrange(dist)
+   })
+}
+
+shinyApp(ui, server)
+```
+
+```{r}
+reset_dist <- function(x, click) {
+  nearPoints(x, click, allRows = TRUE, threshold = 10, addDist = TRUE)$dist_
+}
+
+reset_selection <- function(x, brush) {
+   brushedPoints(x, brush,  allRows = TRUE)$selected_
+ }
+
+scatter <- function(x, dists) {
+  x %>%
+    mutate(dist = dists, selected = ifelse(dist <= 9, "Selected", "Not Selected")) %>%
+    ggplot() +
+    geom_point(aes(MPG, PPG, col = selected), size = 5) +
+    scale_color_manual(values = c("Selected" = "red", "Not Selected" = "black"), guide = guide_legend(override.aes = list(size=5))) +
+    xlab("Minutes Per Game")+
+    ylab("Points Per Game")+
+    ggtitle("Most Efficient Players")
+}
+histogramFT <- function(x, selected_) {
+  x %>%
+    mutate(selected_ = selected_) %>%
+    ggplot() +
+    geom_histogram(aes(FT., alpha = as.numeric(selected_))) +
+    scale_alpha(range = c(0.1, 1)) +
+    ylab("Count")
+}
+histogramX2P <- function(x, selected_) {
+  x %>%
+    mutate(selected_ = selected_) %>%
+    ggplot() +
+    geom_histogram(aes(X2P., alpha = as.numeric(selected_))) +
+    scale_alpha(range = c(0.1, 1)) +
+    ylab("Count")
+}
+histogrameFG <- function(x, selected_) {
+  x %>%
+    mutate(selected_ = selected_) %>%
+    ggplot() +
+    geom_histogram(aes(eFG., alpha = as.numeric(selected_))) +
+    scale_alpha(range = c(0.1, 1)) +
+    ylab("Count")
+}
+histogramTS <- function(x, selected_) {
+  x %>%
+    mutate(selected_ = selected_) %>%
+    ggplot() +
+    geom_histogram(aes(TS., alpha = as.numeric(selected_))) +
+    scale_alpha(range = c(0.1, 1)) +
+    ylab("Count")
+ }
+    
+
+
+ui <- fluidPage(
+  theme = bs_theme(version = 5, bootswatch = "flatly"), # set the theme
+  
+  
+  tabsetPanel(
+    tabPanel("Scatter Plot and Data Table",
+             plotOutput("plot", click = "plot_click"),
+             dataTableOutput("table")
+    ),
+    
+    tabPanel("Histogram and Data Table",
+             plotOutput("plot2", brush = brushOpts("plot_brush", direction = "x")),
+              selectInput("category", "Select a category:",c("Free Throw PCT", "2 Point PCT", "Effective Field Goal PCT", "True Shooting PCT"),
+             dataTableOutput("table2")
+            
+)
+             
+    ),
+    
+    tabPanel("Tab 3"
+             
+    )
+  )
+)
+
+server <- function(input, output) {
+  
+  dist <- reactiveVal(rep(1, nrow(nba_stats)))
+  observeEvent(input$plot_click, {
+    dist(reset_dist(nba_stats, input$plot_click))
+  })
+  
+  output$plot <- renderPlot({
+    scatter(nba_stats, dist())
+  })
+  
+  output$table <- renderDataTable({
+    nba_stats %>%
+      mutate(dist = dist()) %>%
+      arrange(dist)
+  })
+  
+   selected <- reactiveVal(rep(TRUE, nrow(nba_stats)))
+   observeEvent(
+     input$plot_brush,
+     selected(reset_selection(nba_stats, input$plot_brush))
+   )
+   
+   output$plot2 <- renderPlot(
+    switch(input$category,
+            "Free Throw PCT" = histogramFT(nba_stats, selected()),
+            "2 Point PCT" = histogramX2P(nba_stats, selected()),
+            "Effective Field Goal PCT" = histogrameFG(nba_stats, selected()),
+            "True Shooting PCT" = histogramTS(nba_stats, selected())
+          )
+)
+   
+   output$table2 <- renderDataTable(filter(nba_stats, selected()))
+}
+
+shinyApp(ui, server)
+```
+
+
+```{r}
+reset_dist <- function(x, click) {
+  nearPoints(x, click, allRows = TRUE, threshold = 10, addDist = TRUE)$dist_
+}
+
+reset_selection <- function(x, brush) {
+  brushedPoints(x, brush,  allRows = TRUE)$selected_
+}
+
+scatter <- function(x, dists) {
+  x %>%
+    mutate(dist = dists, selected = ifelse(dist <= 9, "Selected", "Not Selected")) %>%
+    ggplot() +
+    geom_point(aes(MPG, PPG, col = selected), size = 5) +
+    scale_color_manual(values = c("Selected" = "red", "Not Selected" = "black"), guide = guide_legend(override.aes = list(size=5))) +
+    xlab("Minutes Per Game")+
+    ylab("Points Per Game")+
+    ggtitle("Most Efficient Players")
+}
+
+histogramFT <- function(x, selected_) {
+  x %>%
+    mutate(selected_ = selected_) %>%
+    ggplot() +
+    geom_histogram(aes(FT., alpha = as.numeric(selected_))) +
+    scale_alpha(range = c(0.1, 1)) +
+    ylab("Count")
+}
+
+histogramX2P <- function(x, selected_) {
+  x %>%
+    mutate(selected_ = selected_) %>%
+    ggplot() +
+    geom_histogram(aes(X2P., alpha = as.numeric(selected_))) +
+    scale_alpha(range = c(0.1, 1)) +
+    ylab("Count")
+}
+
+histogrameFG <- function(x, selected_) {
+  x %>%
+    mutate(selected_ = selected_) %>%
+    ggplot() +
+    geom_histogram(aes(eFG., alpha = as.numeric(selected_))) +
+    scale_alpha(range = c(0.1, 1)) +
+    ylab("Count")
+}
+
+histogramTS <- function(x, selected_) {
+  x %>%
+    mutate(selected_ = selected_) %>%
+    ggplot() +
+    geom_histogram(aes(TS., alpha = as.numeric(selected_))) +
+    scale_alpha(range = c(0.1, 1)) +
+    ylab("Count")
+}
+
+ui <- fluidPage(
+  theme = bs_theme(version = 5, bootswatch = "flatly"), # set the theme
+  
+  tabsetPanel(
+    tabPanel("NBA Statistics 2022-2023",
+     p(" This is data collected of the top 100 highest averaging points per game players of the 2022-2023 season. On the 2nd tab you will find the most efficient players which can be easily calculated as Minutes Per Game vs Points Per Game graph. This is a good way to determine the efficieny of players because you can see how much they score given the minutes they play. On the third tab you will find 4 histograms of various percentages throughout the season. The user is able to select and move a brush that will update a table and show which players have that percentage for the 2022-23 season. I hope you enjoy the app :)"),
+     img(src = "my_image.png", height = 500, width = 500)
+    ),
+    tabPanel("Most Efficient Players",
+             plotOutput("plot", click = "plot_click"),
+             dataTableOutput("table")
+    ),
+    
+    tabPanel("Various Percentages of Players",
+             plotOutput("plot2", brush = brushOpts("plot_brush", direction = "x")),
+             selectInput("category", "Select a category:",c("Free Throw PCT", "2 Point PCT", "Effective Field Goal PCT", "True Shooting PCT"),
+                                selected = c("Free Throw PCT", "2 Point PCT", "Effective Field Goal PCT", "True Shooting PCT")),
+             
+             dataTableOutput("table2")
+    )
+    
+  )
+)
+
+server <- function(input, output) {
+  
+  dist <- reactiveVal(rep(1, nrow(nba_stats)))
+  observeEvent(input$plot_click, {
+    dist(reset_dist(nba_stats, input$plot_click))
+  })
+  
+  output$plot <- renderPlot({
+    scatter(nba_stats, dist())
+  })
+  
+  output$table <- renderDataTable({
+    nba_stats %>%
+      mutate(dist = dist()) %>%
+      arrange(dist)
+  })
+  selected <- reactiveVal(rep(TRUE, nrow(nba_stats)))
+   observeEvent(
+     input$plot_brush,
+     selected(reset_selection(nba_stats, input$plot_brush))
+   )
+   
+   output$plot2 <- renderPlot(
+    switch(input$category,
+            "Free Throw PCT" = histogramFT(nba_stats, selected()),
+            "2 Point PCT" = histogramX2P(nba_stats, selected()),
+            "Effective Field Goal PCT" = histogrameFG(nba_stats, selected()),
+            "True Shooting PCT" = histogramTS(nba_stats, selected())
+          )
+)
+   
+   output$table2 <- renderDataTable(filter(nba_stats, selected()))
+}
+
+shinyApp(ui, server)
+```
+
+```{r}
+descriptive_text <-
+  ("")
+
+```
+
